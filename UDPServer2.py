@@ -4,6 +4,8 @@ from pymongo import MongoClient
 import json
 import socket
 import sys
+from CommunicationCodes import RequestType
+import TCPServerCreator
 
 bufferSize  = 1024
 
@@ -39,8 +41,14 @@ def appendToServerList(serverIp, serverPort, PID, message):
     f.write(serverIp + ":" + str(serverPort) + ":" + str(PID) + message + "\n");
     f.close()
 
+
+def createTCPServer(id, num_of_players, password):
+
+    TCPServerCreator()
+
+
 # def startDedicatedServer(serverIp, serverPort):
-    
+
 
 def startServer(localPort):
     # Create a datagram socket
@@ -56,8 +64,11 @@ def startServer(localPort):
     # Listen for incoming datagrams
     while(True):
         message, address = reciveRequest(UDPSocket)
-        if message["requestType"] == "create":
+        if message["requestType"] == RequestType.create:
             localPort += 1
+            createTCPServer(message["serverInfo"]["id"],
+                            message["serverInfo"]["numberOfPlayers"],
+                            message["serverInfo"]["password"])
             appendToServerList(localIP, localPort, 111, message)
             # startDedicatedServer(localIP, localPort)
         #Logs
