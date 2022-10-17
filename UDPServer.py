@@ -16,7 +16,7 @@ class UDPServer():
 
     def __init__(self, port):
         self.port = port
-        self.ip = self.getIpAddress()
+        self.ip = self.get_ip_address()
         self.database = self.connect_to_database("server_list")
         self.clear_db()
         self.startServer()
@@ -50,7 +50,7 @@ class UDPServer():
         coll.drop()
 
 
-    def getIpAddress(self):
+    def get_ip_address(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # Check local IP
@@ -77,19 +77,22 @@ class UDPServer():
             print(clientIP)
 
             #Create new TCP server
-            if message["requestType"] == RequestType.CREATE:
+            if message.get("requestType") == RequestType.CREATE:
                 port_pool = self.createTCPServer(message)
                 message["serverInfo"]["ip"] = self.ip
                 message["serverInfo"]["ports"] = port_pool
                 response = self.prepareResponse(message["serverInfo"], ResponseType.SUCCESS)
                 self.sendResponse(UDPSocket, address, response)
                 self.save_to_db(message["serverInfo"])
-            elif message["requestType"] == RequestType.GET:
+            elif message.get("requestType") == RequestType.GET:
                 servers = self.get_from_db()
                 for server in servers:
                     response = self.prepareResponse(server, ResponseType.SUCCESS)
                     self.sendResponse(UDPSocket, address, response)
                 response = self.prepareResponse(None, ResponseType.ENDOFMESSAGE)
+                self.sendResponse(UDPSocket, address, response)
+            else:
+                response = self.prepareResponse(None, ResponseType.BADREQUEST)
                 self.sendResponse(UDPSocket, address, response)
     
 
