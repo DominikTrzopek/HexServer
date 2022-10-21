@@ -1,17 +1,17 @@
-class Config(object):
+class Config():
 
     @staticmethod
-    def credentials():
+    def get_credentials():
         return "mongodb://root:pass@0.0.0.0:8081/",
 
     @staticmethod
-    def db_name():
+    def get_db_name():
         return "Hex"
 
     @staticmethod
-    def server_collection():
+    def get_server_collection():
         return "servers"
 
     @staticmethod
-    def test_collection():
+    def get_test_collection():
         return "test"

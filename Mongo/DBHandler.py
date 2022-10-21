@@ -1,6 +1,7 @@
-import json
 import pymongo
 from Mongo.DBConfig import Config
+from pymongo import errors
+
 
 class SingletonMeta(type):
 
@@ -19,10 +20,11 @@ class DBHandler(metaclass=SingletonMeta):
         self.database = self.connect_to_database()
 
     def connect_to_database(self):
-        client = pymongo.MongoClient(Config.credentials())
-        db = client[Config.db_name()]
-        print("Connected to mongodb, db collections: ")
-        print(db.list_collection_names())
+        try:
+            client = pymongo.MongoClient(Config.get_credentials())
+            db = client[Config.get_db_name()]
+        except (ConnectionRefusedError, errors.InvalidURI) as MongoError:
+            exit("Fatal error: Connection to database refused" + MongoError._message)
         return db
 
     def get_db_collection(self, db, name):

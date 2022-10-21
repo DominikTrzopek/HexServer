@@ -1,4 +1,3 @@
-import pymongo
 import json
 import socket
 import sys
@@ -7,6 +6,7 @@ from CommunicationCodes import ResponseType
 from UDP.TCPServerCreator import TCPServerCreator
 from Mongo.DBHandler import DBHandler
 from Mongo.DBHandler import Config
+
 
 bufferSize = 1024
 
@@ -17,7 +17,7 @@ class UDPServer():
         self.port = port
         self.ip = self.get_ip_address()
         self.database = DBHandler()
-        self.database.clear_collection(Config.server_collection())
+        self.database.clear_collection(Config.get_server_collection())
         self.startServer()
 
     def get_ip_address(self):
@@ -29,8 +29,7 @@ class UDPServer():
 
     def startServer(self):
         # Create a datagram socket
-        UDPSocket = socket.socket(
-            family=socket.AF_INET, type=socket.SOCK_DGRAM)
+        UDPSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
         # Bind to address and ip
         print("UDP server up and listening " + self.ip + ":" + str(self.port))
@@ -38,6 +37,7 @@ class UDPServer():
 
         # Listen for incoming datagrams
         while (True):
+            # Receive request from client
             message, address = self.reciveRequest(UDPSocket)
 
             # Client logs
@@ -46,37 +46,48 @@ class UDPServer():
             print(clientMsg)
             print(clientIP)
 
-            # Create new TCP server
+            # Handle request and send response
             if message.get("requestType") == RequestType.CREATE:
-                try:
-                    port_pool = self.createTCPServer(message)
-                    message["serverInfo"]["ip"] = self.ip
-                    message["serverInfo"]["ports"] = port_pool
-                    response = self.prepareResponse(
-                        message["serverInfo"], ResponseType.SUCCESS)
-                    self.sendResponse(UDPSocket, address, response)
-                    self.database.save_to_collection(message["serverInfo"], Config.server_collection())
-                except KeyError:
-                    response = self.prepareResponse(
-                        None, ResponseType.BADARGUMENTS)
-                    self.sendResponse(UDPSocket, address, response)
-                except ChildProcessError:
-                    response = self.prepareResponse(
-                        None, ResponseType.TCPSERVERFAIL)
-                    self.sendResponse(UDPSocket, address, response)
+                self.handle_create_request(message, UDPSocket, address)
             elif message.get("requestType") == RequestType.GET:
-                servers = self.database.get_all_from_collection(
-                    Config.server_collection())
-                for server in servers:
-                    response = self.prepareResponse(
-                        server, ResponseType.SUCCESS)
-                    self.sendResponse(UDPSocket, address, response)
-                response = self.prepareResponse(
-                    None, ResponseType.ENDOFMESSAGE)
-                self.sendResponse(UDPSocket, address, response)
+                self.handle_get_request(UDPSocket, address)
             else:
                 response = self.prepareResponse(None, ResponseType.BADREQUEST)
                 self.sendResponse(UDPSocket, address, response)
+
+    def handle_create_request(self, message, UDPSocket, address):
+        try:
+            # Create TCPServer as subproces
+            port_pool = self.createTCPServer(message)
+
+            # Fill TCP server ip and ports
+            message["serverInfo"]["ip"] = self.ip
+            message["serverInfo"]["ports"] = port_pool
+
+            # Send response and save to db
+            response = self.prepareResponse(message["serverInfo"], ResponseType.SUCCESS)
+            self.sendResponse(UDPSocket, address, response)
+            self.database.save_to_collection(message["serverInfo"], Config.get_server_collection())
+    
+        # Handle errors
+        except KeyError:
+            response = self.prepareResponse(None, ResponseType.BADARGUMENTS)
+            self.sendResponse(UDPSocket, address, response)
+        except ChildProcessError:
+            response = self.prepareResponse(None, ResponseType.TCPSERVERFAIL)
+            self.sendResponse(UDPSocket, address, response)
+
+    def handle_get_request(self, UDPSocket, address):
+        # Get from db
+        servers = self.database.get_all_from_collection(Config.get_server_collection())
+        for server in servers:
+            # For each found server send separete message
+            response = self.prepareResponse(server, ResponseType.SUCCESS)
+            self.sendResponse(UDPSocket, address, response)
+    
+        # Notify client that all data was sent
+        response = self.prepareResponse(None, ResponseType.ENDOFMESSAGE)
+        self.sendResponse(UDPSocket, address, response)
 
     def reciveRequest(self, socket):
         try:

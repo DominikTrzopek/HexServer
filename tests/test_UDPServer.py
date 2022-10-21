@@ -1,13 +1,11 @@
 import unittest
-import unittest.mock
-from unittest.mock import patch
 import subprocess
 import socket
 import time
 from CommunicationCodes import ResponseType
-from UDP.TCPServerCreator import TCPServerCreator
 import os
 import signal
+
 
 bufferSize = 1024
 
@@ -25,19 +23,16 @@ class TestUDPServer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.UDP_IP = cls.getIpAddress()
-        cls.UDP_PORT = 9999
+        cls.UDP_PORT = 9900
         cls.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         cls.process = subprocess.Popen(
-            ["python3", "-m", "StartServer", str(cls.UDP_PORT), "no_ogs"],  preexec_fn=os.setsid)
-        time.sleep(2)
+            ["python3", "-m", "StartServer", str(cls.UDP_PORT), "no_logs"],  preexec_fn=os.setsid)
+        time.sleep(2) # wait for server to start
 
     @classmethod
     def tearDownClass(cls):
         cls.sock.close()
         os.killpg(os.getpgid(cls.process.pid), signal.SIGTERM)
-
-    def fakeTCPCreator():
-        return 1
 
     def test_create_missingRequestType(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
@@ -70,7 +65,7 @@ class TestUDPServer(unittest.TestCase):
     def test_create_missingServerInfo(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
         cls.sock.send(bytes(
-                        '{"requestType": 1 }', "utf-8"))
+            '{"requestType": 1 }', "utf-8"))
         response = cls.sock.recv(bufferSize).decode("utf-8")
         assert ('"responseType": ' + str(ResponseType.BADARGUMENTS.value)) in response
 
@@ -88,6 +83,20 @@ class TestUDPServer(unittest.TestCase):
         response = cls.sock.recv(bufferSize).decode("utf-8")
         assert ('"responseType": ' + str(ResponseType.TCPSERVERFAIL.value)) in response
 
+    def test_get_correctRequest(cls):
+        cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
+        cls.sock.send(bytes(
+            '{"id": 1, "requestType": 0}', "utf-8"))
+        response = cls.sock.recv(bufferSize).decode("utf-8")
+        correct_codes = [str(ResponseType.SUCCESS.value), str(ResponseType.ENDOFMESSAGE.value)]
+        assert any (codes in response for codes in correct_codes)
+
+    def test_get_badJson(cls):
+        cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
+        cls.sock.send(bytes(
+            '{"requestType" 0}', "utf-8"))
+        response = cls.sock.recv(bufferSize).decode("utf-8")
+        assert ('"responseType": ' + str(ResponseType.BADREQUEST.value)) in response
 
 if __name__ == '__main__':
     unittest.main()
