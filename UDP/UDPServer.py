@@ -18,7 +18,7 @@ class UDPServer():
         self.ip = self.get_ip_address()
         self.database = DBHandler()
         self.database.clear_collection(Config.get_server_collection())
-        self.startServer()
+        self.start_server()
 
     def get_ip_address(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,7 +27,7 @@ class UDPServer():
         s.connect(("8.8.8.8", 80))
         return s.getsockname()[0]
 
-    def startServer(self):
+    def start_server(self):
         # Create a datagram socket
         UDPSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
@@ -38,7 +38,7 @@ class UDPServer():
         # Listen for incoming datagrams
         while (True):
             # Receive request from client
-            message, address = self.reciveRequest(UDPSocket)
+            message, address = self.recive_request(UDPSocket)
 
             # Client logs
             clientMsg = "Message from Client:{}".format(message)
@@ -52,44 +52,47 @@ class UDPServer():
             elif message.get("requestType") == RequestType.GET:
                 self.handle_get_request(UDPSocket, address)
             else:
-                response = self.prepareResponse(None, ResponseType.BADREQUEST)
-                self.sendResponse(UDPSocket, address, response)
+                response = self.prepare_response(None, ResponseType.BADREQUEST)
+                self.send_response(UDPSocket, address, response)
 
     def handle_create_request(self, message, UDPSocket, address):
         try:
-            # Create TCPServer as subproces
-            port_pool = self.createTCPServer(message)
-
-            # Fill TCP server ip and ports
+            # Fill server ip
             message["serverInfo"]["ip"] = self.ip
+
+            # Create TCPServer as subproces
+            port_pool, pid = self.create_TCPserver(message)
+
+            # Fill TCP server ports
+            message["serverInfo"]["pid"] = pid
             message["serverInfo"]["ports"] = port_pool
 
             # Send response and save to db
-            response = self.prepareResponse(message["serverInfo"], ResponseType.SUCCESS)
-            self.sendResponse(UDPSocket, address, response)
+            response = self.prepare_response(message["serverInfo"], ResponseType.SUCCESS)
+            self.send_response(UDPSocket, address, response)
             self.database.save_to_collection(message["serverInfo"], Config.get_server_collection())
     
         # Handle errors
         except KeyError:
-            response = self.prepareResponse(None, ResponseType.BADARGUMENTS)
-            self.sendResponse(UDPSocket, address, response)
+            response = self.prepare_response(None, ResponseType.BADARGUMENTS)
+            self.send_response(UDPSocket, address, response)
         except ChildProcessError:
-            response = self.prepareResponse(None, ResponseType.TCPSERVERFAIL)
-            self.sendResponse(UDPSocket, address, response)
+            response = self.prepare_response(None, ResponseType.TCPSERVERFAIL)
+            self.send_response(UDPSocket, address, response)
 
     def handle_get_request(self, UDPSocket, address):
         # Get from db
         servers = self.database.get_all_from_collection(Config.get_server_collection())
         for server in servers:
             # For each found server send separete message
-            response = self.prepareResponse(server, ResponseType.SUCCESS)
-            self.sendResponse(UDPSocket, address, response)
+            response = self.prepare_response(server, ResponseType.SUCCESS)
+            self.send_response(UDPSocket, address, response)
     
         # Notify client that all data was sent
-        response = self.prepareResponse(None, ResponseType.ENDOFMESSAGE)
-        self.sendResponse(UDPSocket, address, response)
+        response = self.prepare_response(None, ResponseType.ENDOFMESSAGE)
+        self.send_response(UDPSocket, address, response)
 
-    def reciveRequest(self, socket):
+    def recive_request(self, socket):
         try:
             bytesAddressPair = socket.recvfrom(bufferSize)
             message = json.loads(str(bytesAddressPair[0], 'utf-8'))
@@ -98,23 +101,23 @@ class UDPServer():
         address = bytesAddressPair[1]
         return (message, address)
 
-    def sendResponse(self, socket, address, message):
+    def send_response(self, socket, address, message):
         bytesToSend = str.encode(json.dumps(message))
         socket.sendto(bytesToSend, address)
         print("Server send: " + format(message))
 
-    def prepareResponse(self, server_info, responseCode):
+    def prepare_response(self, server_info, responseCode):
         response = {}
         response["responseType"] = responseCode
         response["serverInfo"] = server_info
         return response
 
-    def createTCPServer(self, message):
+    def create_TCPserver(self, message):
         print("Starting TCP server")
-        creator = TCPServerCreator(message, self.port)
-        creator.start_TCP_server()
+        creator = TCPServerCreator(message, self.port + 1)
+        pid = creator.start_TCP_server()
         self.port += message["serverInfo"]["numberOfPlayers"]
-        return creator.port_pool
+        return creator.port_pool, pid
 
 
 if __name__ == "__main__":

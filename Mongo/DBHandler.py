@@ -33,7 +33,7 @@ class DBHandler(metaclass=SingletonMeta):
 
     def save_to_collection(self, data, collection):
         coll = self.get_db_collection(self.database, collection)
-        coll.insert_one(data)
+        return coll.insert_one(data)
 
     def get_all_from_collection(self, collection):
         coll = self.get_db_collection(self.database, collection)
@@ -43,3 +43,9 @@ class DBHandler(metaclass=SingletonMeta):
     def clear_collection(self, collection):
         coll = self.get_db_collection(self.database, collection)
         coll.drop()
+
+    def modify_data(self, collection, filter, new_value):
+        print(filter)
+        coll = self.get_db_collection(self.database, collection)
+        coll.update_one(filter, new_value)
+
