@@ -5,6 +5,7 @@ import os
 import threading
 from Mongo.DBHandler import DBHandler
 from Mongo.DBHandler import Config
+from TCP.TCPConnection import TCPConnection
 
 bufferSize = 1024
 
@@ -15,63 +16,68 @@ class TCPServer():
         self.password = password
         self.ports = ports
         self.database = DBHandler()
-        self.sockets = self.prepare_sockets()
+        self.sockets, self.conn_info = self.prepare_sockets()
         self.connections = 0
-        #self.authorisefffff(self.sockets[0])
         self.connected_ports = self.connect_clients(self.sockets)
 
     def connect_clients(self, sockets):
-        for socket in sockets:
-            thread = threading.Thread(target = self.listen_for_connections, args = (socket,))
+        for it, socket in enumerate(sockets):
+            thread = threading.Thread(target = self.listen_for_connections, args = (socket, self.conn_info[it],))
             thread.start()
 
-    def listen_for_connections(self, socket):
+    def listen_for_connections(self, socket, this_conn_info):
         socket.listen()
         conn, addr = socket.accept()
         with conn:
-            print(f"Connected by {addr}")
             data = conn.recv(bufferSize)
             print(data)
-            check = self.authorise(data)
+            check = self.authorise(data, addr)
             if check:
                 self.update_num_of_connections(1)
-            conn.sendall(data)
+                this_conn_info.fill_info(data, addr)
+            for info in self.conn_info:
+                conn.sendall(info.response_with_info())
 
-    def authorise(self, data):
+    def authorise(self, data, addr):
         message = json.loads(str(data, 'utf-8'))
-        if message["password"] == self.password:
-            print("Correct password")
-            return True
-        return False
+        try:
+            if message["password"] != self.password:
+                print(f"Connected by {addr}: wrong password")
+                return False
+            if message["playerInfo"]["id"] == "" or message["playerInfo"]["name"] == "":
+                print(f"Connected by {addr}: empty player info")
+                return False
+        except KeyError:
+            print(f"Connected by {addr}: bad connect message")
+            return False
+        print(f"Connected by {addr}: success")
+        return True
 
     def update_num_of_connections(self, val):
         self.connections += val
         self.database.modify_data(
             Config.get_server_collection(),
             {'pid': os.getpid()},
-            {"$set": {'connections': self.connections}} #TODO set value
+            {"$set": {'connections': self.connections}}
         )
 
     def prepare_sockets(self):
         sockets = []
+        conn_info = []
         for port in self.ports:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.bind((self.ip, port))
             sockets.append(sock)
-        return sockets
+            conn_info.append(TCPConnection(port))
+        return sockets, conn_info
 
-    def authorisefffff(self, socket):
+    def server_hello(self, socket):
         socket.listen()
         conn, addr = socket.accept()
-        self.database.modify_data(
-            Config.get_server_collection(),
-            {'pid': os.getpid()},
-            {"$set": {'connections': self.connections}} #TODO set value
-        )
         with conn:
             self.connections += 1
             print(f"Connected by {addr}")
             while True:
-               # data = conn.recv(bufferSize)
-               # print(data)
+                data = conn.recv(bufferSize)
+                print(data)
                 conn.sendall(str.encode("Server says hi"))

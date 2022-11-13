@@ -21,7 +21,7 @@ class ArgParser():
     def print_args(self):
         print("TCP server arguments:")
         print("IP: " + self.server_ip) 
-        print("ID: " + str(self.creator_id)) 
+        print("ID: " + self.creator_id) 
         print("PASS: " + self.server_password) 
         print("PORTS: " + str(self.ports)) 
 

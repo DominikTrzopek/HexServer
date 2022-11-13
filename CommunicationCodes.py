@@ -12,3 +12,8 @@ class ResponseType(IntEnum):
     BADREQUEST = 2      # No request type scpecified
     BADARGUMENTS = 3    # No required arguments in request
     TCPSERVERFAIL = 4   # TCP process fail to start
+
+class ClientStatusType(IntEnum):
+    NOTCONNECTED = 0,
+    NOTREADY = 1,
+    READY = 2

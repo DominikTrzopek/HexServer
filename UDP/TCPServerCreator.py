@@ -21,6 +21,6 @@ class TCPServerCreator():
 
     def start_TCP_server(self):
         try:
-            return subprocess.Popen(["python3", "-m", self.script_name, str(self.id), self.password, self.ip, str(self.port_pool)]).pid
+            return subprocess.Popen(["python3", "-m", self.script_name, self.id, self.password, self.ip, str(self.port_pool)]).pid
         except Exception:
             raise ChildProcessError
