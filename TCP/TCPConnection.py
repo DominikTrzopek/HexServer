@@ -25,7 +25,4 @@ class TCPConnection():
         client_info["name"] = self.client_name
         client_info["status"] = new_status
         response["playerInfo"] = client_info
-        print("-------------------------")
-        print(response)
-        print("-------------------------")
         return str.encode(json.dumps(response) + "\n")

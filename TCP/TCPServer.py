@@ -3,9 +3,11 @@ import json
 import socket
 import os
 import threading
+import time
 from Mongo.DBHandler import DBHandler
 from Mongo.DBHandler import Config
 from TCP.TCPConnection import TCPConnection
+
 
 bufferSize = 1024
 
@@ -18,6 +20,7 @@ class TCPServer():
         self.database = DBHandler()
         self.sockets, self.conn_info = self.prepare_sockets()
         self.connections = 0
+        self.listen = True
         self.connected_ports = self.connect_clients(self.sockets)
 
     def connect_clients(self, sockets):
@@ -35,6 +38,23 @@ class TCPServer():
             if check:
                 self.update_num_of_connections(1)
                 this_conn_info.fill_info(data, addr)
+            for info in self.conn_info:
+                conn.sendall(info.response_with_info())
+            receiver_thread = threading.Thread(target = self.listen_for_status_change, args = (conn, this_conn_info, addr,))
+            sender_thread = threading.Thread(target = self.send_data, args = (conn,))
+            receiver_thread.start()
+            sender_thread.start()
+            sender_thread.join()
+
+    def listen_for_status_change(self, conn, conn_info, addr):
+        while(self.listen):
+            data = conn.recv(bufferSize)
+            print(data)
+            conn_info.fill_info(data, addr)
+
+    def send_data(self, conn):
+        while(self.listen):
+            time.sleep(1)
             for info in self.conn_info:
                 conn.sendall(info.response_with_info())
 
