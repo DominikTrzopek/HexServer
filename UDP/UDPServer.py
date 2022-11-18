@@ -48,29 +48,29 @@ class UDPServer():
 
             # Handle request and send response
             if message.get("requestType") == RequestType.CREATE:
-                self.handle_create_request(message, UDPSocket, address)
+                self.handle_create_request(message.get("serverInfo"), UDPSocket, address)
             elif message.get("requestType") == RequestType.GET:
                 self.handle_get_request(UDPSocket, address)
             else:
                 response = self.prepare_response(None, ResponseType.BADREQUEST)
                 self.send_response(UDPSocket, address, response)
 
-    def handle_create_request(self, message, UDPSocket, address):
+    def handle_create_request(self, server_info, UDPSocket, address):
         try:
             # Fill server ip
-            message["serverInfo"]["ip"] = self.ip
+            server_info["ip"] = self.ip
 
             # Create TCPServer as subproces
-            port_pool, pid = self.create_TCPserver(message)
+            port_pool, pid = self.create_TCPserver(server_info)
 
             # Fill TCP server ports
-            message["serverInfo"]["pid"] = pid
-            message["serverInfo"]["ports"] = port_pool
+            server_info["pid"] = pid
+            server_info["ports"] = port_pool
 
             # Send response and save to db
-            response = self.prepare_response(message["serverInfo"], ResponseType.SUCCESS)
+            response = self.prepare_response(server_info, ResponseType.SUCCESS)
             self.send_response(UDPSocket, address, response)
-            self.database.save_to_collection(message["serverInfo"], Config.get_server_collection())
+            self.database.save_to_collection(server_info, Config.get_server_collection())
     
         # Handle errors
         except KeyError:
@@ -87,7 +87,6 @@ class UDPServer():
             # For each found server send separete message
             response = self.prepare_response(server, ResponseType.SUCCESS)
             self.send_response(UDPSocket, address, response)
-    
         # Notify client that all data was sent
         response = self.prepare_response(None, ResponseType.ENDOFMESSAGE)
         self.send_response(UDPSocket, address, response)
@@ -107,16 +106,18 @@ class UDPServer():
         print("Server send: " + format(message))
 
     def prepare_response(self, server_info, responseCode):
+        if(server_info != None):
+            server_info["password"] = None
         response = {}
         response["responseType"] = responseCode
         response["serverInfo"] = server_info
         return response
 
-    def create_TCPserver(self, message):
+    def create_TCPserver(self, server_info):
         print("Starting TCP server")
-        creator = TCPServerCreator(message, self.port + 1)
+        creator = TCPServerCreator(server_info, self.port + 1)
         pid = creator.start_TCP_server()
-        self.port += message["serverInfo"]["numberOfPlayers"]
+        self.port = creator.port_pool[-1]
         return creator.port_pool, pid
 
 

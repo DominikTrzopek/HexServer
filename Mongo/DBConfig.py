@@ -18,7 +18,7 @@ class Config():
 
     @staticmethod
     def get_max_msg_num():
-        return 10
+        return 50
 
     @staticmethod
     def get_test_collection():

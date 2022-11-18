@@ -25,7 +25,15 @@ class TCPConnection():
         client_info["name"] = self.client_name
         client_info["status"] = new_status
         response["playerInfo"] = client_info
-        return str.encode(json.dumps(response) + "\n")
+        return response
+
+    def clear_info(self):
+        self.client_status = ClientStatusType.NOTCONNECTED
+        self.client_name = None
+        self.addres = None
+
+    def clear_id(self):
+        self.client_id = None
 
     def collect_message(msg):
         return json.loads(str(msg, 'utf-8'))
