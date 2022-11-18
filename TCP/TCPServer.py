@@ -22,6 +22,14 @@ class TCPServer():
         self.connections = 0
         self.listen = True
         self.connected_ports = self.connect_clients(self.sockets)
+        #stworzyć kolekcje dla wiadomości
+        self.msg_queue = self.create_msg_queue()
+        #self.num_of_read_msg = 0 -> dla każdego wątku
+        self.num_of_all_msg = 0
+        self.pid = os.getpid()
+
+    def create_msg_queue(self):
+        return [None for i in range(Config.get_max_msg_num())]
 
     def connect_clients(self, sockets):
         for it, socket in enumerate(sockets):
@@ -33,30 +41,52 @@ class TCPServer():
         conn, addr = socket.accept()
         with conn:
             data = conn.recv(bufferSize)
-            print(data)
             check = self.authorise(data, addr)
             if check:
                 self.update_num_of_connections(1)
                 this_conn_info.fill_info(data, addr)
             for info in self.conn_info:
                 conn.sendall(info.response_with_info())
-            receiver_thread = threading.Thread(target = self.listen_for_status_change, args = (conn, this_conn_info, addr,))
+            
+            msg = TCPConnection.collect_message(data)
+            self.msg_queue[self.num_of_all_msg % Config.get_max_msg_num()] = msg
+            self.num_of_all_msg += 1
+
+            receiver_thread = threading.Thread(target = self.listen_for_data, args = (conn, this_conn_info, addr,))
             sender_thread = threading.Thread(target = self.send_data, args = (conn,))
             receiver_thread.start()
             sender_thread.start()
             sender_thread.join()
 
-    def listen_for_status_change(self, conn, conn_info, addr):
+    def listen_for_data(self, conn, conn_info, addr):
         while(self.listen):
             data = conn.recv(bufferSize)
-            print(data)
+            msg = TCPConnection.collect_message(data)
+            self.msg_queue[self.num_of_all_msg % Config.get_max_msg_num()] = msg
+            #save to database
+            self.num_of_all_msg += 1
+            #all += 1
             conn_info.fill_info(data, addr)
 
     def send_data(self, conn):
+        num_of_read_msg = self.num_of_all_msg
         while(self.listen):
             time.sleep(1)
-            for info in self.conn_info:
-                conn.sendall(info.response_with_info())
+            current = self.num_of_all_msg % Config.get_max_msg_num()
+            diff = self.num_of_all_msg - num_of_read_msg
+            print(str(self.num_of_all_msg) + " | " + str(num_of_read_msg) + " | " + str(diff) + " ||| " + str(current) + " | " + str((current - diff) % Config.get_max_msg_num()))
+            if diff > Config.get_max_msg_num():
+                pass
+                #close connection
+            if diff > 0:
+                index = index = (current - diff) % Config.get_max_msg_num()
+                for i in range(0, diff):
+                    print(TCPConnection.prepare_message(self.msg_queue[index]))
+                    conn.sendall(TCPConnection.prepare_message(self.msg_queue[index]))
+                    num_of_read_msg += 1
+                    index += 1
+                    index %= Config.get_max_msg_num()
+
 
     def authorise(self, data, addr):
         message = json.loads(str(data, 'utf-8'))

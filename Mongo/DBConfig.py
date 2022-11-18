@@ -13,5 +13,13 @@ class Config():
         return "servers"
 
     @staticmethod
+    def get_TCP_message_collection(server_pid):
+        return "TCP_" + str(server_pid)
+
+    @staticmethod
+    def get_max_msg_num():
+        return 10
+
+    @staticmethod
     def get_test_collection():
         return "test"

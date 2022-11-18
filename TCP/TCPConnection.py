@@ -26,3 +26,10 @@ class TCPConnection():
         client_info["status"] = new_status
         response["playerInfo"] = client_info
         return str.encode(json.dumps(response) + "\n")
+
+    def collect_message(msg):
+        return json.loads(str(msg, 'utf-8'))
+
+    def prepare_message(msg):
+        return str.encode(json.dumps(msg) + "\n")
+

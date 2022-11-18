@@ -49,3 +49,8 @@ class DBHandler(metaclass=SingletonMeta):
         coll = self.get_db_collection(self.database, collection)
         coll.update_one(filter, new_value)
 
+    def get_X_last_documents(self, collection):
+        coll = self.get_db_collection(self.database, collection)
+        data = coll.find({}, {'_id': False}).sort({'_id':-1}).limit(Config.get_num_of_saved_TCP_documents)
+        return [msg for msg in data]
+
