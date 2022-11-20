@@ -34,7 +34,11 @@ class TCPConnection():
         self.client_id = None
 
     def collect_message(msg):
-        return json.loads(str(msg, 'utf-8'))
+        try:
+            collected = json.loads(str(msg, 'utf-8'))
+        except (TypeError, ValueError):
+            return ""
+        return collected
 
     def prepare_message(msg):
         return str.encode(json.dumps(msg) + "\n")

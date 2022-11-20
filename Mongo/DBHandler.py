@@ -45,7 +45,6 @@ class DBHandler(metaclass=SingletonMeta):
         coll.drop()
 
     def modify_data(self, collection, filter, new_value):
-        print(filter)
         coll = self.get_db_collection(self.database, collection)
         coll.update_one(filter, new_value)
 
@@ -54,3 +53,14 @@ class DBHandler(metaclass=SingletonMeta):
         data = coll.find({}, {'_id': False}).sort({'_id':-1}).limit(Config.get_num_of_saved_TCP_documents)
         return [msg for msg in data]
 
+    def list_all_collections(self):
+        return self.database.list_collection_names()
+
+    def delete_from_collection(self, collection, filter):
+        coll = self.get_db_collection(self.database, collection)
+        coll.delete_one(filter)
+
+    
+    def get_one_from_collection(self, collection, filter):
+        coll = self.get_db_collection(self.database, collection)
+        return coll.find_one(filter, {'_id': False})
