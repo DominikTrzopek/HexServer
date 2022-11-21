@@ -1,5 +1,6 @@
 import json
 from CommunicationCodes import ClientStatusType
+from Encryption import id_len
 
 class TCPConnection():
     def __init__(self, port):

@@ -6,6 +6,8 @@ from CommunicationCodes import ResponseType
 from UDP.TCPServerCreator import TCPServerCreator
 from Mongo.DBHandler import DBHandler
 from Mongo.DBHandler import Config
+from Encryption import hash, id_len
+from Daemon.Cleaner import Cleaner
 
 
 bufferSize = 1024
@@ -51,6 +53,8 @@ class UDPServer():
                 self.handle_create_request(message.get("serverInfo"), UDPSocket, address)
             elif message.get("requestType") == RequestType.GET:
                 self.handle_get_request(UDPSocket, address)
+            elif message.get("requestType") == RequestType.DELETE:
+                self.handle_delete_request(message, UDPSocket, address)
             else:
                 response = self.prepare_response(None, ResponseType.BADREQUEST)
                 self.send_response(UDPSocket, address, response)
@@ -66,6 +70,10 @@ class UDPServer():
             # Fill TCP server ports
             server_info["pid"] = pid
             server_info["ports"] = port_pool
+
+            # Hash sensitive data
+            server_info["password"] = hash(server_info["password"])
+            server_info["creatorId"] = hash(server_info["creatorId"])
 
             # Send response and save to db
             response = self.prepare_response(server_info, ResponseType.SUCCESS)
@@ -90,6 +98,22 @@ class UDPServer():
         # Notify client that all data was sent
         response = self.prepare_response(None, ResponseType.ENDOFMESSAGE)
         self.send_response(UDPSocket, address, response)
+
+    def handle_delete_request(self, msg, UDPSocket, address):
+        try:
+            pid = msg["serverId"]
+            id = msg["playerid"]
+            server = self.database.get_one_from_collection(Config.get_server_collection(), {"pid" : pid})
+            if server != None and server["creatorId"] == hash(id):
+                Cleaner(pid).do_cleanup()
+                response = self.prepare_response(None, ResponseType.SUCCESS)
+                self.send_response(UDPSocket, address, response)
+            else:
+                response = self.prepare_response(None, ResponseType.BADREQUEST)
+                self.send_response(UDPSocket, address, response)
+        except KeyError:
+            response = self.prepare_response(None, ResponseType.BADARGUMENTS)
+            self.send_response(UDPSocket, address, response)
 
     def recive_request(self, socket):
         try:

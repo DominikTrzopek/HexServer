@@ -99,6 +99,7 @@ class TCPServer():
                     for info in self.conn_info:
                         conn.sendall(str.encode(json.dumps(
                             info.response_with_info()) + "\n"))
+                        print("sent data")
                     self.unlock_mutexes()
                     msg = TCPConnection.collect_message(data)
                     if msg != "":
@@ -186,7 +187,7 @@ class TCPServer():
             return False, ResponseType.BADREQUEST
         except json.decoder.JSONDecodeError:
             return False, ResponseType.BADREQUEST
-        print(f"{os.getpid}: connected by {addr}")
+        print(f"{os.getpid()}: connected by {addr}")
         return True, None
 
     #######################################################

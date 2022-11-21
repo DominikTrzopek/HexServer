@@ -4,6 +4,7 @@ from enum import IntEnum
 class RequestType(IntEnum):
     GET = 0
     CREATE = 1
+    DELETE = 2
 
 
 class ResponseType(IntEnum):
