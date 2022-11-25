@@ -181,11 +181,11 @@ class TCPServer():
             if message["password"] != self.password:
                 return False, ResponseType.WRONGPASSWORD
             if message["playerInfo"]["id"].strip() == "" or message["playerInfo"]["name"].strip() == "":
-                return False, ResponseType.BADARGUMENTS
+                return False, ResponseType.BADPLAYERDATA
         except KeyError:
-            return False, ResponseType.BADREQUEST
+            return False, ResponseType.BADCONNECTION
         except json.decoder.JSONDecodeError:
-            return False, ResponseType.BADREQUEST
+            return False, ResponseType.BADCONNECTION
         print(f"{os.getpid()}: connected by {addr}")
         return True, None
 
