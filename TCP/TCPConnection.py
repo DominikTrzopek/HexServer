@@ -42,7 +42,7 @@ class TCPConnection():
         try:
             collected = json.loads(str(msg, 'utf-8'))
         except (TypeError, ValueError):
-            return ""
+            return "{ }"
         return collected
 
     def prepare_message(msg):

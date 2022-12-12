@@ -11,6 +11,7 @@ from Mongo.DBHandler import Config
 from TCP.TCPConnection import TCPConnection
 from socket import SHUT_RDWR
 from CommunicationCodes import ResponseType
+from CommunicationCodes import ClientStatusType
 
 
 bufferSize = 1024
@@ -26,6 +27,10 @@ class TCPServer():
         self.database = DBHandler()
         self.threads = []
         self.connections = 0
+
+        self.gameStarted = False
+        self.current_turn = 1
+        self.num_of_players = len(ports)
 
         self.sockets, self.conn_info = self.prepare_sockets()
         self.listen = [True for i in range(0, len(ports) + 1)]
@@ -80,7 +85,7 @@ class TCPServer():
         for thread in self.threads:
             thread.join()
 
-    def listen_for_connections(self, socket, this_conn_info, num_of_thread):
+    def listen_for_connections(self, socket, this_onn_info, num_of_thread):
         while (self.listen[-1]):
             self.listen[num_of_thread] = True
             self.connect_locks[num_of_thread].acquire()
@@ -96,7 +101,7 @@ class TCPServer():
                 data = conn.recv(bufferSize)
                 check, error_response = self.authorise(data, addr)
                 if check:
-                    this_conn_info.fill_info(data, addr, num_of_thread)
+                    self.conn_info[num_of_thread].fill_info(data, addr, num_of_thread)
                     for info in self.conn_info:
                         conn.sendall(str.encode(json.dumps(
                             info.response_with_info()) + "\n"))
@@ -105,11 +110,11 @@ class TCPServer():
                     self.unlock_mutexes()
                     if data != None:
                         self.msg_queue[self.num_of_all_msg %
-                                       Config.get_max_msg_num()] = this_conn_info.response_with_info()
+                                       Config.get_max_msg_num()] = self.conn_info[num_of_thread].response_with_info()
                         self.num_of_all_msg += 1
 
                     receiver_thread = threading.Thread(target=self.listen_for_data, args=(
-                        conn, this_conn_info, addr, num_of_thread,))
+                        conn, self.conn_info[num_of_thread], addr, num_of_thread,))
                     sender_thread = threading.Thread(
                         target=self.send_data, args=(conn, num_of_thread,))
 
@@ -132,7 +137,8 @@ class TCPServer():
         response["errorMessage"] = message
         return str.encode(json.dumps(response))
 
-    def listen_for_data(self, conn, conn_info, addr, num_of_thread):
+    def listen_for_data(self, conn, cnn_info, addr, num_of_thread):
+        print((num_of_thread + 1) % (self.num_of_players))
         while (self.listen[num_of_thread]):
             do_read = False
             try:
@@ -143,13 +149,27 @@ class TCPServer():
                     data = conn.recv(bufferSize)
                     if (len(data) == 0):
                         raise socket.error
-                    self.add_to_msg_queue(TCPConnection.collect_message(data))
                     self.update_server_ttl()
-                    conn_info.fill_info(data, addr, num_of_thread)
+                    msg = TCPConnection.collect_message(data)
+                    if(msg != ""):
+                        if self.gameStarted:
+                            if msg.get("command") == 1:
+                                msg = self.build_ext_turn_msg(self.conn_info[(num_of_thread + 1) % (self.num_of_players)].client_id)
+                                print(msg)
+                            ########
+                            self.add_to_msg_queue(msg)
+                            ########
+                        else:
+                            self.add_to_msg_queue(msg)
+                            self.conn_info[num_of_thread].fill_info(data, addr, num_of_thread)
+                            if self.conn_info[num_of_thread].client_status == ClientStatusType.INGAGME and not self.gameStarted:
+                                self.gameStarted = True
+                                self.add_to_msg_queue(self.build_ext_turn_msg(self.conn_info[num_of_thread].client_id))
+                                print(self.build_ext_turn_msg(self.conn_info[num_of_thread].client_id))
             except socket.error:
                 self.listen[num_of_thread] = False
-                conn_info.clear_info()
-                self.add_to_msg_queue(conn_info.response_with_info())
+                self.conn_info[num_of_thread].clear_info()
+                self.add_to_msg_queue(self.conn_info[num_of_thread].response_with_info())
                 return
 
     def send_data(self, conn, num_of_thread):
@@ -177,6 +197,13 @@ class TCPServer():
         self.conn_info[num].clear_info()
         self.conn_info[num].clear_id()
         conn.close()
+
+    def build_ext_turn_msg(self, id):
+        msg = {}
+        msg["networkId"] = id
+        msg["command"] = 1
+        msg["args"] = ["1"]
+        return msg
 
     def authorise(self, data, addr):
         try:
