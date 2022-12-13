@@ -15,21 +15,22 @@ from CommunicationCodes import ClientStatusType
 
 
 bufferSize = 1024
-timeout = 5
+timeout = 2
 
 
 class TCPServer():
-    def __init__(self, ip, id, password, ports):
+    def __init__(self, ip, id, password, ports, game_lenght):
         self.ip = ip
         self.creator_id = id
         self.password = password
         self.ports = ports
+        self.game_lenght = game_lenght
         self.database = DBHandler()
         self.threads = []
         self.connections = 0
 
         self.gameStarted = False
-        self.current_turn = 1
+        self.current_move = 0
         self.num_of_players = len(ports)
 
         self.sockets, self.conn_info = self.prepare_sockets()
@@ -154,7 +155,11 @@ class TCPServer():
                     if(msg != ""):
                         if self.gameStarted:
                             if msg.get("command") == 1:
-                                msg = self.build_ext_turn_msg(self.conn_info[(num_of_thread + 1) % (self.num_of_players)].client_id)
+                                self.current_move += 1
+                                if self.current_move >= self.game_lenght * self.num_of_players:
+                                    msg = self.modify_ext_turn_msg(num_of_thread, msg, 2)
+                                else:
+                                    msg = self.modify_ext_turn_msg(num_of_thread, msg, 1)
                                 print(msg)
                             ########
                             self.add_to_msg_queue(msg)
@@ -202,7 +207,12 @@ class TCPServer():
         msg = {}
         msg["networkId"] = id
         msg["command"] = 1
-        msg["args"] = ["1"]
+        msg["args"] = ["0"]
+        return msg
+
+    def modify_ext_turn_msg(self, num_of_thread, msg, command):
+        msg["networkId"] = self.conn_info[(num_of_thread + 1) % (self.num_of_players)].client_id
+        msg["command"] = command
         return msg
 
     def authorise(self, data, addr):
