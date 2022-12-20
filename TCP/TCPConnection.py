@@ -14,7 +14,6 @@ class TCPConnection():
 
     def fill_info(self, msg, addr, thread):
         client_data = json.loads(str(msg, 'utf-8')).get("playerInfo")
-        print("aaaaaa" + client_data.get("secretId"))
         self.client_id = client_data.get("id")
         if(client_data.get("secretId") != None and client_data.get("secretId") != ""):
             self.secret_id = client_data.get("secretId")
@@ -49,6 +48,5 @@ class TCPConnection():
         return collected
 
     def prepare_message(msg):
-        print(str.encode(json.dumps(msg) + "\n"))
         return str.encode(json.dumps(msg) + "\n")
 

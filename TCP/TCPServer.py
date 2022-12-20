@@ -12,9 +12,9 @@ from TCP.TCPConnection import TCPConnection
 from socket import SHUT_RDWR
 from CommunicationCodes import ResponseType
 from CommunicationCodes import ClientStatusType
+from copy import deepcopy
 
-
-bufferSize = 1024
+bufferSize = 8196
 timeout = 2
 
 
@@ -28,6 +28,7 @@ class TCPServer():
         self.database = DBHandler()
         self.threads = []
         self.connections = 0
+        self.gameState = None
 
         self.gameStarted = False
         self.current_move = 0
@@ -169,6 +170,8 @@ class TCPServer():
                                     msg = self.modify_ext_turn_msg(num_of_thread, msg, 2)
                                 else:
                                     msg = self.modify_ext_turn_msg(num_of_thread, msg, 1)
+                                    self.gameState = deepcopy(msg)
+                                    msg["gameState"] = ""
                             ########
                             self.add_to_msg_queue(msg)
                             ########
@@ -189,8 +192,8 @@ class TCPServer():
         if not self.gameStarted:
             self.msg_read[num_of_thread] = self.num_of_all_msg
         else:
-            ## send last game state
-            self.msg_read[num_of_thread] = self.num_of_msg_last_turn
+            conn.sendall(TCPConnection.prepare_message(self.gameState))
+            self.msg_read[num_of_thread] = self.num_of_msg_last_turn + 1
         while (self.listen[num_of_thread]):
             self.locks[num_of_thread].acquire()
             current = self.num_of_all_msg % Config.get_max_msg_num()
@@ -223,7 +226,6 @@ class TCPServer():
     def check_reconnect(self, data, addr, thread_num):
         try:
             message = json.loads(str(data, 'utf-8'))
-            print(self.conn_info[thread_num].secret_id)
             if message["playerInfo"]["secretId"] != self.conn_info[thread_num].secret_id:
                 return False, ResponseType.BADPLAYERDATA
         except KeyError:
@@ -247,6 +249,7 @@ class TCPServer():
         msg["networkId"] = id
         msg["command"] = 1
         msg["args"] = ["0"]
+        msg["gameState"] = ""
         return msg
 
     def modify_ext_turn_msg(self, num_of_thread, msg, command):
