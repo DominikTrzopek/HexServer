@@ -13,7 +13,7 @@ class TCPConnection():
         self.thread_number = -1
 
     def fill_info(self, msg, addr, thread):
-        client_data = json.loads(str(msg, 'utf-8')).get("playerInfo")
+        client_data = msg.get("playerInfo")
         self.client_id = client_data.get("id")
         if(client_data.get("secretId") != None and client_data.get("secretId") != ""):
             self.secret_id = client_data.get("secretId")
@@ -46,6 +46,12 @@ class TCPConnection():
         except (TypeError, ValueError):
             return ""
         return collected
+
+    def prepare_error_response(response_code, message=""):
+        response = {}
+        response["code"] = response_code
+        response["errorMessage"] = message
+        return str.encode(json.dumps(response))
 
     def prepare_message(msg):
         return str.encode(json.dumps(msg) + "\n")
