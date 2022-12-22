@@ -7,7 +7,7 @@ tcp_script = "TCP.TCPStarter"
 class TCPServerCreator():
 
     def __init__(self, message, port):
-        self.ip, self.id, self.password, self.port_pool = self.parse_arguments(
+        self.ip, self.id, self.password, self.port_pool, self.game_lenght = self.parse_arguments(
             message, port)
         self.script_name = tcp_script
 
@@ -16,8 +16,9 @@ class TCPServerCreator():
         id = server_info["creatorId"]
         num_of_players = server_info["numberOfPlayers"]
         password = server_info["password"]
+        game_lenght = server_info["numberOfTurns"]
         port_pool = self.get_ports(num_of_players, port, ip)
-        return ip, id, password, port_pool
+        return ip, id, password, port_pool, game_lenght
 
     def get_ports(self, lenght, port, ip):
         port_pool = []
@@ -38,6 +39,6 @@ class TCPServerCreator():
     def start_TCP_server(self):
         try:
             return subprocess.Popen(
-                ["python3", "-m", self.script_name, self.id, self.password, self.ip, str(self.port_pool)]).pid
+                ["python3", "-m", self.script_name, self.id, self.password, self.ip, str(self.port_pool), str(self.game_lenght)]).pid
         except Exception:
             raise ChildProcessError

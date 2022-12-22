@@ -10,7 +10,7 @@ from Encryption import hash, id_len
 from Daemon.Cleaner import Cleaner
 
 
-bufferSize = 1024
+bufferSize = 8192
 
 
 class UDPServer():
@@ -72,7 +72,8 @@ class UDPServer():
             server_info["ports"] = port_pool
 
             # Hash sensitive data
-            server_info["password"] = hash(server_info["password"])
+            if server_info["password"] != None and server_info["password"].strip() != "":
+                server_info["password"] = hash(server_info["password"])
             server_info["creatorId"] = hash(server_info["creatorId"])
 
             # Send response and save to db
@@ -130,8 +131,9 @@ class UDPServer():
         print("Server send: " + format(message))
 
     def prepare_response(self, server_info, responseCode):
-        if(server_info != None):
-            server_info["password"] = None
+        if server_info != None:
+            if server_info["password"] != None and server_info["password"].strip() != "":
+                server_info["password"] = "##"
         response = {}
         response["responseType"] = responseCode
         response["serverInfo"] = server_info

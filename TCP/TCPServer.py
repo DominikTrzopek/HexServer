@@ -11,28 +11,38 @@ from Mongo.DBHandler import Config
 from TCP.TCPConnection import TCPConnection
 from socket import SHUT_RDWR
 from CommunicationCodes import ResponseType
+from CommunicationCodes import ClientStatusType
+from copy import deepcopy
 
-
-bufferSize = 1024
-timeout = 10
+bufferSize = 8196
+timeout = 2
 
 
 class TCPServer():
-    def __init__(self, ip, id, password, ports):
+    def __init__(self, ip, id, password, ports, game_lenght):
         self.ip = ip
         self.creator_id = id
         self.password = password
         self.ports = ports
+        self.game_lenght = game_lenght
         self.database = DBHandler()
         self.threads = []
         self.connections = 0
+        self.game_state = None
+
+        self.game_started = False
+        self.current_move = 0
+        self.num_of_players = len(ports)
 
         self.sockets, self.conn_info = self.prepare_sockets()
+        self.msg_read = [0 for i in range(0, len(ports) + 1)]
         self.listen = [True for i in range(0, len(ports) + 1)]
         self.locks = [threading.Lock() for i in range(0, len(ports))]
+        self.connect_locks = [threading.Lock() for i in range(0, len(ports))]
 
         self.insert_to_server_ttl()
         self.num_of_all_msg = 0
+        self.num_of_msg_last_turn = 0
         self.msg_queue = self.create_msg_queue()
 
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -49,7 +59,6 @@ class TCPServer():
                 pass
         for thread in self.threads:
             thread.join()
-            print("thread gone")
         sys.exit(0)
 
     def prepare_sockets(self):
@@ -57,6 +66,8 @@ class TCPServer():
         conn_info = []
         for port in self.ports:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, bufferSize)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufferSize)
             sock.bind((self.ip, port))
             sockets.append(sock)
             conn_info.append(TCPConnection(port))
@@ -74,107 +85,211 @@ class TCPServer():
     def start_conn_threads(self, sockets):
         for it, socket in enumerate(sockets):
             thread = threading.Thread(target=self.listen_for_connections, args=(
-                socket, self.conn_info[it], it,))
+                socket, it,))
             self.threads.append(thread)
             thread.start()
         for thread in self.threads:
             thread.join()
 
-    def listen_for_connections(self, socket, this_conn_info, num_of_thread):
+    def listen_for_connections(self, sock, num_of_thread):
         while (self.listen[-1]):
-            self.listen[num_of_thread] = True
-            socket.listen()
-            port_number = socket.getsockname()[1]
+            port_number = self.prepare_for_connection(sock, num_of_thread)
             try:
-                conn, addr = socket.accept()
+                conn, addr = sock.accept()
             except OSError:
                 return
             with conn:
-                data = conn.recv(bufferSize)
-                check, error_response = self.authorise(data, addr)
+                check, error_response, data = self.connect_player(
+                    conn, addr, num_of_thread)
                 if check:
+                    msg = json.loads(str(data, 'utf-8'))
+                    if not self.game_started:
+                        self.conn_info[num_of_thread].fill_info(
+                            msg, addr, num_of_thread)
+                        self.send_all_player_info(conn)
                     self.update_num_of_connections(1)
                     self.update_port_pool(port_number, if_remove=True)
-                    this_conn_info.fill_info(data, addr)
-                    for info in self.conn_info:
-                        conn.sendall(str.encode(json.dumps(
-                            info.response_with_info()) + "\n"))
-                        print("sent data")
                     self.unlock_mutexes()
-                    msg = TCPConnection.collect_message(data)
-                    if msg != "":
-                        self.msg_queue[self.num_of_all_msg %
-                                       Config.get_max_msg_num()] = msg
-                        self.num_of_all_msg += 1
-
-                    receiver_thread = threading.Thread(target=self.listen_for_data, args=(
-                        conn, this_conn_info, addr, num_of_thread,))
-                    sender_thread = threading.Thread(
-                        target=self.send_data, args=(conn, num_of_thread,))
-
-                    receiver_thread.start()
-                    sender_thread.start()
-
-                    receiver_thread.join()
-                    sender_thread.join()
-
+                    if data != None:
+                        self.send_new_player_info(num_of_thread)
+                    self.handle_threads(conn, addr, num_of_thread)
                     self.disconnect_client(
                         conn, addr, num_of_thread, port_number)
                 elif (error_response != None):
-                    conn.sendall(self.prepare_error_response(error_response))
+                    conn.sendall(
+                        TCPConnection.prepare_error_response(error_response))
+                self.connect_locks[num_of_thread].release()
 
-    def prepare_error_response(self, response_code, message=""):
-        response = {}
-        response["code"] = response_code
-        response["errorMessage"] = message
-        return str.encode(json.dumps(response))
+    def prepare_for_connection(self, sock, num_of_thread):
+        self.listen[num_of_thread] = True
+        self.connect_locks[num_of_thread].acquire()
+        sock.listen()
+        return sock.getsockname()[1]
 
-    def listen_for_data(self, conn, conn_info, addr, num_of_thread):
+    def connect_player(self, conn, addr, num_of_thread):
+        if not self.game_started:
+            conn.sendall(str.encode("Server says hi"))
+            data = conn.recv(bufferSize)
+            check, error_response = self.authorise(data, addr)
+            return check, error_response, data
+        data = conn.recv(bufferSize)
+        check, error_response = self.check_reconnect(data, addr, num_of_thread)
+        return check, error_response, data
+
+    def handle_threads(self, conn, addr, num_of_thread):
+        receiver_thread = threading.Thread(target=self.listen_for_data, args=(
+            conn, self.conn_info[num_of_thread], addr, num_of_thread,))
+        sender_thread = threading.Thread(
+            target=self.send_data, args=(conn, num_of_thread,))
+        receiver_thread.start()
+        sender_thread.start()
+        receiver_thread.join()
+        sender_thread.join()
+
+    def send_new_player_info(self, num_of_thread):
+        self.msg_queue[self.num_of_all_msg %
+                       Config.get_max_msg_num()] = self.conn_info[num_of_thread].response_with_info()
+        self.num_of_all_msg += 1
+
+    def send_all_player_info(self, conn):
+        for info in self.conn_info:
+            conn.sendall(str.encode(json.dumps(
+                info.response_with_info()) + "\n"))
+
+    def listen_for_data(self, conn, cnn_info, addr, num_of_thread):
         while (self.listen[num_of_thread]):
             do_read = False
-            print(do_read)
             try:
                 r, _, _ = select.select([conn], [], [], timeout)
                 do_read = bool(r)
-
                 if do_read:
-                    data = conn.recv(bufferSize)
-                    if (len(data) == 0):
-                        raise socket.error
-                    self.add_to_msg_queue(TCPConnection.collect_message(data))
+                    data = self.recive_large(conn, b'')
                     self.update_server_ttl()
-                    conn_info.fill_info(data, addr)
+                    msg = TCPConnection.collect_message(data)
+                    if (msg != ""):
+                        if self.game_started:
+                            self.handle_ingame_commands(num_of_thread, msg)
+                        else:
+                            self.handle_lobby_messages(num_of_thread, msg, addr)
             except socket.error:
-                self.listen[num_of_thread] = False
-                conn_info.clear_info()
-                self.add_to_msg_queue(conn_info.response_with_info())
+                self.handle_sock_error(num_of_thread)
                 return
+    
+    def handle_ingame_commands(self, num_of_thread, msg):
+        if msg.get("command") == 1:
+            self.current_move += 1
+            self.num_of_msg_last_turn = self.num_of_all_msg
+            if self.current_move >= self.game_lenght * self.num_of_players:
+                msg = self.modify_ext_turn_msg(
+                    num_of_thread, msg, 2)
+            else:
+                msg = self.modify_ext_turn_msg(
+                    num_of_thread, msg, 1)
+                self.game_state = deepcopy(msg)
+                msg["gameState"] = ""
+        self.add_to_msg_queue(msg)
+
+    def handle_lobby_messages(self, num_of_thread, msg, addr):
+        print(msg)
+        self.add_to_msg_queue(msg)
+        self.conn_info[num_of_thread].fill_info(
+            msg, addr, num_of_thread)
+        if self.conn_info[num_of_thread].client_status == ClientStatusType.INGAGME:
+            self.game_started = True
+            self.add_to_msg_queue(self.build_ext_turn_msg(
+                self.conn_info[num_of_thread].client_id))
+
+    def handle_sock_error(self, num_of_thread):
+        self.listen[num_of_thread] = False
+        if not self.game_started:
+            self.conn_info[num_of_thread].clear_info()
+        self.add_to_msg_queue(
+            self.conn_info[num_of_thread].response_with_info())
 
     def send_data(self, conn, num_of_thread):
-        num_of_read_msg = self.num_of_all_msg
+        self.prepare_for_sending_data(conn, num_of_thread)
         while (self.listen[num_of_thread]):
             self.locks[num_of_thread].acquire()
             current = self.num_of_all_msg % Config.get_max_msg_num()
-            diff = self.num_of_all_msg - num_of_read_msg
+            diff = self.num_of_all_msg - self.msg_read[num_of_thread]
             if diff > Config.get_max_msg_num():
                 self.listen[num_of_thread] = False
                 return
-            if diff > 0:
-                index = (current - diff) % Config.get_max_msg_num()
-                for i in range(0, diff):
-                    conn.sendall(TCPConnection.prepare_message(
-                        self.msg_queue[index]))
-                    num_of_read_msg += 1
-                    index += 1
-                    index %= Config.get_max_msg_num()
+            if diff > 0 and self.listen[num_of_thread]:
+                self.send_all_msgs(current, diff, conn, num_of_thread)
+
+    def prepare_for_sending_data(self, conn, num_of_thread):
+        if not self.game_started:
+            self.msg_read[num_of_thread] = self.num_of_all_msg
+        else:
+            conn.sendall(TCPConnection.prepare_message(self.game_state))
+            self.msg_read[num_of_thread] = self.num_of_msg_last_turn + 1
+
+    def send_all_msgs(self, current, diff, conn, num_of_thread):
+        index = (current - diff) % Config.get_max_msg_num()
+        for i in range(0, diff):
+            conn.sendall(TCPConnection.prepare_message(
+                self.msg_queue[index]))
+            self.msg_read[num_of_thread] += 1
+            index += 1
+            index %= Config.get_max_msg_num() 
+
+    def recive_large(self, conn, data):
+        new_data = conn.recv(bufferSize)
+        data_str = str(new_data, 'utf-8')
+        if (len(new_data) == 0):
+            raise socket.error
+        while ("\n" not in data_str):
+            data += new_data
+            new_data = conn.recv(bufferSize)
+            data_str = str(new_data, 'utf-8')
+            if (len(new_data) == 0):
+                raise socket.error
+        return data + new_data
+
+    def check_reconnect(self, data, addr, thread_num):
+        try:
+            message = json.loads(str(data, 'utf-8'))
+            if message["playerInfo"]["secretId"] != self.conn_info[thread_num].secret_id:
+                return False, ResponseType.BADPLAYERDATA
+        except KeyError:
+            return False, ResponseType.BADCONNECTION
+        except json.decoder.JSONDecodeError:
+            return False, ResponseType.BADCONNECTION
+        print(f"{os.getpid()}: connected by {addr}")
+        self.conn_info[thread_num].client_status = ClientStatusType.INGAGME
+        return True, None
 
     def disconnect_client(self, conn, addr, num, port):
         print(f"Disconnected {addr}")
         self.update_num_of_connections(-1)
         self.update_port_pool(port, if_remove=False)
-        self.conn_info[num].clear_info()
-        self.conn_info[num].clear_id()
+        self.conn_info[num].client_status = ClientStatusType.NOTCONNECTED
+        if not self.game_started:
+            self.conn_info[num].clear_info()
+            self.conn_info[num].clear_id()
         conn.close()
+
+    def build_ext_turn_msg(self, id):
+        msg = {}
+        msg["networkId"] = id
+        msg["command"] = 1
+        msg["args"] = ["0"]
+        msg["gameState"] = ""
+        return msg
+
+    def modify_ext_turn_msg(self, num_of_thread, msg, command):
+        new_msg = {}
+        conn_number = (num_of_thread + 1) % (self.num_of_players)
+        print()
+        if self.conn_info[conn_number].client_status != ClientStatusType.NOTCONNECTED:
+            new_msg["networkId"] = self.conn_info[conn_number].client_id
+        else:
+            new_msg = self.modify_ext_turn_msg(num_of_thread + 1, msg, 1)
+        new_msg["command"] = command
+        new_msg["args"] = msg["args"]
+        new_msg["gameState"] = msg["gameState"]
+        return new_msg
 
     def authorise(self, data, addr):
         try:
@@ -182,15 +297,13 @@ class TCPServer():
             if message["password"] != self.password:
                 return False, ResponseType.WRONGPASSWORD
             if message["playerInfo"]["id"].strip() == "" or message["playerInfo"]["name"].strip() == "":
-                return False, ResponseType.BADARGUMENTS
+                return False, ResponseType.BADPLAYERDATA
         except KeyError:
-            return False, ResponseType.BADREQUEST
+            return False, ResponseType.BADCONNECTION
         except json.decoder.JSONDecodeError:
-            return False, ResponseType.BADREQUEST
+            return False, ResponseType.BADCONNECTION
         print(f"{os.getpid()}: connected by {addr}")
         return True, None
-
-    #######################################################
 
     def insert_to_server_ttl(self):
         data = {}
@@ -224,20 +337,7 @@ class TCPServer():
             {"$set": {'last_msg': time.time()}}
         )
 
-    ################################################################
-
     def unlock_mutexes(self):
         for lock in self.locks:
             if (lock.locked()):
                 lock.release()
-
-    def server_hello(self, socket):
-        socket.listen()
-        conn, addr = socket.accept()
-        with conn:
-            self.connections += 1
-            print(f"Connected by {addr}")
-            while True:
-                data = conn.recv(bufferSize)
-                print(data)
-                conn.sendall(str.encode("Server says hi"))
