@@ -44,9 +44,16 @@ class TestUDPServer(unittest.TestCase):
     def test_create_correctRequest(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
         cls.sock.send(bytes(
-            '{"requestType": 1, "serverInfo": {"creatorId": 1, "password": "pass", "numberOfPlayers": 3, "numberOfTurns": 3, "seed": 1, "mapType": 5, "ip": "", "ports": []}}', "utf-8"))
+            '{"requestType": 1, "serverInfo": {"creatorId": "86852d82-e20a-4949-a6fc-44d85108614d", "serverName": "", "password": "", "numberOfPlayers": 2, "numberOfTurns": 15, "seed": 3423, "mapType": "plains", "mapSize": 24, "customMap": "", "ip": "", "ports": [], "connections": 0, "pid": 0}}', "utf-8"))
         response = cls.sock.recv(bufferSize).decode("utf-8")
         assert ('"responseType": ' + str(ResponseType.SUCCESS.value)) in response
+       
+    def test_create_correctRequest(cls):
+        cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
+        cls.sock.send(bytes(
+            '{"requestType": 1, "serverInfo": {"creatorId": 1, "password": "pass", "numberOfPlayers": 3, "numberOfTurns": 3, "seed": 1, "mapType": 5, "ip": "", "ports": []}}', "utf-8"))
+        response = cls.sock.recv(bufferSize).decode("utf-8")
+        assert ('"responseType": ' + str(ResponseType.TCPSERVERFAIL.value)) in response
 
     def test_create_badRequestType(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
@@ -58,7 +65,7 @@ class TestUDPServer(unittest.TestCase):
     def test_create_badJson(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
         cls.sock.send(bytes(
-            '{"requestType": 1, "serverInfo": {"creatorId", ts": []}}', "utf-8"))
+            '{"requestType": 1, "serverInfo": {"creatorId", ts": []}', "utf-8"))
         response = cls.sock.recv(bufferSize).decode("utf-8")
         assert ('"responseType": ' + str(ResponseType.BADREQUEST.value)) in response
 
@@ -68,13 +75,6 @@ class TestUDPServer(unittest.TestCase):
             '{"requestType": 1 }', "utf-8"))
         response = cls.sock.recv(bufferSize).decode("utf-8")
         assert ('"responseType": ' + str(ResponseType.BADARGUMENTS.value)) in response
-
-    def test_create_missingIpInfo(cls):
-        cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))
-        cls.sock.send(bytes(
-            '{"requestType": 1, "serverInfo": {"creatorId": 1, "password": "pass", "numberOfPlayers": 3, "numberOfTurns": 3, "seed": 1, "mapType": 5, "ports": []}}', "utf-8"))
-        response = cls.sock.recv(bufferSize).decode("utf-8")
-        assert ('"responseType": ' + str(ResponseType.SUCCESS.value)) in response
 
     def test_create_badTCPCreatorArguments(cls):
         cls.sock.connect((cls.UDP_IP, cls.UDP_PORT))

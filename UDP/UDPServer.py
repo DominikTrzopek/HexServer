@@ -82,7 +82,7 @@ class UDPServer():
             self.database.save_to_collection(server_info, Config.get_server_collection())
     
         # Handle errors
-        except KeyError:
+        except (KeyError, TypeError):
             response = self.prepare_response(None, ResponseType.BADARGUMENTS)
             self.send_response(UDPSocket, address, response)
         except ChildProcessError:
