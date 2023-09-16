@@ -1,8 +1,7 @@
-class Config():
-
+class Config:
     @staticmethod
     def get_credentials():
-        return "mongodb://root:pass@0.0.0.0:8081/",
+        return ("mongodb://root:pass@0.0.0.0:8081/",)
 
     @staticmethod
     def get_db_name():

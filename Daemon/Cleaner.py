@@ -21,7 +21,5 @@ class Cleaner:
 
     def delete_data_from_db(self):
         filter = {"pid": self.pid}
-        self.database.delete_from_collection(
-            Config.get_ttl_collection(), filter)
-        self.database.delete_from_collection(
-            Config.get_server_collection(), filter)
+        self.database.delete_from_collection(Config.get_ttl_collection(), filter)
+        self.database.delete_from_collection(Config.get_server_collection(), filter)

@@ -4,7 +4,6 @@ from pymongo import errors
 
 
 class SingletonMeta(type):
-
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
@@ -15,7 +14,6 @@ class SingletonMeta(type):
 
 
 class DBHandler(metaclass=SingletonMeta):
-
     def __init__(self):
         self.database = self.connect_to_database()
 
@@ -37,7 +35,7 @@ class DBHandler(metaclass=SingletonMeta):
 
     def get_all_from_collection(self, collection):
         coll = self.get_db_collection(self.database, collection)
-        servers = [info for info in coll.find({}, {'_id': False})]
+        servers = [info for info in coll.find({}, {"_id": False})]
         return servers
 
     def clear_collection(self, collection):
@@ -50,7 +48,11 @@ class DBHandler(metaclass=SingletonMeta):
 
     def get_X_last_documents(self, collection):
         coll = self.get_db_collection(self.database, collection)
-        data = coll.find({}, {'_id': False}).sort({'_id':-1}).limit(Config.get_num_of_saved_TCP_documents)
+        data = (
+            coll.find({}, {"_id": False})
+            .sort({"_id": -1})
+            .limit(Config.get_num_of_saved_TCP_documents)
+        )
         return [msg for msg in data]
 
     def list_all_collections(self):
@@ -60,7 +62,6 @@ class DBHandler(metaclass=SingletonMeta):
         coll = self.get_db_collection(self.database, collection)
         coll.delete_one(filter)
 
-    
     def get_one_from_collection(self, collection, filter):
         coll = self.get_db_collection(self.database, collection)
-        return coll.find_one(filter, {'_id': False})
+        return coll.find_one(filter, {"_id": False})

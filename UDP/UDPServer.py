@@ -13,8 +13,7 @@ from Daemon.Cleaner import Cleaner
 bufferSize = 8192
 
 
-class UDPServer():
-
+class UDPServer:
     def __init__(self, port):
         self.port = port
         self.ip = self.get_ip_address()
@@ -38,7 +37,7 @@ class UDPServer():
         UDPSocket.bind((self.ip, self.port))
 
         # Listen for incoming datagrams
-        while (True):
+        while True:
             # Receive request from client
             message, address = self.recive_request(UDPSocket)
 
@@ -50,7 +49,9 @@ class UDPServer():
 
             # Handle request and send response
             if message.get("requestType") == RequestType.CREATE:
-                self.handle_create_request(message.get("serverInfo"), UDPSocket, address)
+                self.handle_create_request(
+                    message.get("serverInfo"), UDPSocket, address
+                )
             elif message.get("requestType") == RequestType.GET:
                 self.handle_get_request(UDPSocket, address)
             elif message.get("requestType") == RequestType.DELETE:
@@ -72,15 +73,20 @@ class UDPServer():
             server_info["ports"] = port_pool
 
             # Hash sensitive data
-            if server_info["password"] != None and server_info["password"].strip() != "":
+            if (
+                server_info["password"] != None
+                and server_info["password"].strip() != ""
+            ):
                 server_info["password"] = hash(server_info["password"])
             server_info["creatorId"] = hash(server_info["creatorId"])
 
             # Send response and save to db
             response = self.prepare_response(server_info, ResponseType.SUCCESS)
             self.send_response(UDPSocket, address, response)
-            self.database.save_to_collection(server_info, Config.get_server_collection())
-    
+            self.database.save_to_collection(
+                server_info, Config.get_server_collection()
+            )
+
         # Handle errors
         except (KeyError, TypeError):
             response = self.prepare_response(None, ResponseType.BADARGUMENTS)
@@ -104,7 +110,9 @@ class UDPServer():
         try:
             pid = msg["serverId"]
             id = msg["playerid"]
-            server = self.database.get_one_from_collection(Config.get_server_collection(), {"pid" : pid})
+            server = self.database.get_one_from_collection(
+                Config.get_server_collection(), {"pid": pid}
+            )
             if server != None and server["creatorId"] == hash(id):
                 Cleaner(pid).do_cleanup()
                 response = self.prepare_response(None, ResponseType.SUCCESS)
@@ -119,7 +127,7 @@ class UDPServer():
     def recive_request(self, socket):
         try:
             bytesAddressPair = socket.recvfrom(bufferSize)
-            message = json.loads(str(bytesAddressPair[0], 'utf-8'))
+            message = json.loads(str(bytesAddressPair[0], "utf-8"))
         except ValueError:
             message = {}
         address = bytesAddressPair[1]
@@ -132,7 +140,10 @@ class UDPServer():
 
     def prepare_response(self, server_info, responseCode):
         if server_info != None:
-            if server_info["password"] != None and server_info["password"].strip() != "":
+            if (
+                server_info["password"] != None
+                and server_info["password"].strip() != ""
+            ):
                 server_info["password"] = "##"
         response = {}
         response["responseType"] = responseCode

@@ -13,8 +13,7 @@ class Worker:
         self.database = DBHandler()
 
     def check_ttl(self):
-        servers_ttl = self.database.get_all_from_collection(
-            Config.get_ttl_collection())
+        servers_ttl = self.database.get_all_from_collection(Config.get_ttl_collection())
         for server_ttl in servers_ttl:
             pid = server_ttl["pid"]
             time_diff = time.time() - server_ttl["last_msg"]

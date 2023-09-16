@@ -2,7 +2,8 @@ import json
 from CommunicationCodes import ClientStatusType
 from Encryption import id_len
 
-class TCPConnection():
+
+class TCPConnection:
     def __init__(self, port):
         self.port = port
         self.client_status = ClientStatusType.NOTCONNECTED
@@ -15,7 +16,7 @@ class TCPConnection():
     def fill_info(self, msg, addr, thread):
         client_data = msg.get("playerInfo")
         self.client_id = client_data.get("id")
-        if(client_data.get("secretId") != None and client_data.get("secretId") != ""):
+        if client_data.get("secretId") != None and client_data.get("secretId") != "":
             self.secret_id = client_data.get("secretId")
         self.client_name = client_data.get("name")
         self.client_status = client_data.get("status")
@@ -42,7 +43,7 @@ class TCPConnection():
 
     def collect_message(msg):
         try:
-            collected = json.loads(str(msg, 'utf-8'))
+            collected = json.loads(str(msg, "utf-8"))
         except (TypeError, ValueError):
             return ""
         return collected
@@ -55,4 +56,3 @@ class TCPConnection():
 
     def prepare_message(msg):
         return str.encode(json.dumps(msg) + "\n")
-
